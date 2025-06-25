@@ -1,0 +1,33 @@
+import os
+import subprocess
+
+# Paths
+input_video = "video_20250625_220319_edit.mp4"
+frames_dir = "frames"
+upscaled_dir = "upscaled_frames"
+interpolated_dir = "output"
+final_output = "final_8K_120fps.mp4"
+
+# Step 1: Extract frames from original video
+os.makedirs(frames_dir, exist_ok=True)
+subprocess.run(f'ffmpeg -i {input_video} -qscale:v 2 {frames_dir}/frame_%05d.png', shell=True)
+
+# Step 2: Upscale frames using Real-ESRGAN (Assumes it's set up in Real-ESRGAN dir)
+print("Upscaling frames to 8K using Real-ESRGAN...")
+os.makedirs(upscaled_dir, exist_ok=True)
+subprocess.run(f'python Real-ESRGAN/inference_realesrgan.py -n RealESRGAN_x4plus -i {frames_dir} -o {upscaled_dir} --face_enhance', shell=True)
+
+# Step 3: Interpolate frames to 120fps using RIFE (Assumes it's set up in ECCV2022-RIFE dir)
+print("Interpolating frames to 120fps using RIFE...")
+os.makedirs(interpolated_dir, exist_ok=True)
+subprocess.run(f'python ECCV2022-RIFE/inference_video.py --img {upscaled_dir} --exp 4 --fps 120 --save_path {interpolated_dir}', shell=True)
+
+# Step 4: Rebuild the final video with original audio
+print("Rebuilding final video with 120fps and 8K resolution...")
+subprocess.run(
+    f'ffmpeg -framerate 120 -i {interpolated_dir}/frame_%05d.png -i {input_video} '
+    f'-c:v libx265 -pix_fmt yuv420p -preset slow -crf 18 -map 0:v -map 1:a -shortest {final_output}',
+    shell=True
+)
+
+print("✅ Done! Output saved as:", final_output)
